@@ -34,7 +34,7 @@ def convert_state_dict(state_dict):
     """
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
-        name = k[7:] # remove `module.`
+        name = k.removeprefix('module.')
         new_state_dict[name] = v
     return new_state_dict
 
@@ -256,7 +256,7 @@ def bwmorph(image, n_iter=None):
     
     if skel.ndim != 2:
         raise ValueError('2D array required')
-    if not np.all(np.in1d(image.flat,(0,1))):
+    if not np.all(np.isin(image,(0,1))):
         raise ValueError('Image contains values other than 0 and 1')
 
     # neighborhood mask

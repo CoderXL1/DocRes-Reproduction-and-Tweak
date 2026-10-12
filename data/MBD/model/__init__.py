@@ -1,7 +1,7 @@
 import torchvision.models as models
-from model.densenetccnl import *
-from model.unetnc import *
-from model.gienet import *
+from .densenetccnl import *
+from .unetnc import *
+from .gienet import *
 
 
 def get_model(name, n_classes=1, filters=64,version=None,in_channels=3, is_batchnorm=True, norm='batch', model_path=None, use_sigmoid=True, layers=3,img_size=512):

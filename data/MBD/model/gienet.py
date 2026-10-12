@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn import init
 import functools
-from model.cbam import CBAM
+from .cbam import CBAM
 # Defines the Unet generator.
 # |num_downs|: number of downsamplings in UNet. For example,
 # if |num_downs| == 7, image of size 128x128 will become of size 1x1

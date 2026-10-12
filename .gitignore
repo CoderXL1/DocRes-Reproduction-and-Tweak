@@ -1,0 +1,17 @@
+# Python cache and local environment
+__pycache__/
+*.py[cod]
+.venv/
+
+# IDE and macOS files
+.idea/
+.DS_Store
+
+# Downloaded model weights and local inputs
+checkpoints/
+/data/MBD/checkpoint/
+distorted/
+
+# Generated inference outputs
+/restorted/
+/restored/

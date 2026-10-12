@@ -1,23 +1,45 @@
-import os 
-import cv2 
-import glob
+import cv2
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import utils
 import argparse
 import numpy as np
 
 import torch
 
-from utils import convert_state_dict
 from models import restormer_arch
 from data.preprocess.crop_merge_image import stride_integral
-
-os.sys.path.append('./data/MBD/')
 from data.MBD.infer import net1_net2_infer_single_im
+from inference_runtime import (
+    PROJECT_ROOT, add_runtime_arguments, default_max_size, image_paths, inference_dtype,
+    load_model_state, read_image, select_device, validate_runtime_arguments, write_image,
+)
+
+TASKS = ['dewarping', 'deshadowing', 'appearance', 'deblurring', 'binarization', 'end2end']
+DEFAULT_MBD_PATH = PROJECT_ROOT / 'data/MBD/checkpoint/mbd.pkl'
 
 
-def dewarp_prompt(img):
-    mask = net1_net2_infer_single_im(img,'data/MBD/checkpoint/mbd.pkl')
+def release_mps_cache(model):
+    if next(model.parameters()).device.type == 'mps':
+        torch.mps.empty_cache()
+
+
+@torch.inference_mode()
+def forward_image(model, image, precision='auto'):
+    device = next(model.parameters()).device
+    dtype = inference_dtype(device, precision)
+    # NumPy division otherwise produces float64, which cannot be copied to MPS.
+    image = image.astype(np.float32) / 255.0
+    tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1))).unsqueeze(0)
+    tensor = tensor.to(device=device, dtype=dtype)
+    prediction = model.to(dtype=dtype)(tensor)
+    if not torch.isfinite(prediction).all().item():
+        raise RuntimeError('Model produced non-finite values; try --precision fp32 or a smaller --max_size.')
+    return prediction
+
+
+def dewarp_prompt(img, device='auto', mbd_model_path=DEFAULT_MBD_PATH):
+    mask = net1_net2_infer_single_im(img, mbd_model_path, device=device)
     base_coord = utils.getBasecoord(256,256)/256
     img[mask==0]=0
     mask = cv2.resize(mask,(256,256))/255
@@ -93,20 +115,21 @@ def binarization_promptv2(img):
     high_frequency = cv2.cvtColor(high_frequency,cv2.COLOR_BGR2GRAY)
     return np.concatenate((np.expand_dims(thresh,-1),np.expand_dims(high_frequency,-1),np.expand_dims(result,-1)),-1)
 
-def dewarping(model,im_path):
+def dewarping(model,im_path,mbd_model_path=DEFAULT_MBD_PATH):
     INPUT_SIZE=256
-    im_org = cv2.imread(im_path)
-    im_masked, prompt_org = dewarp_prompt(im_org.copy())
+    device = next(model.parameters()).device
+    im_org = read_image(im_path)
+    im_masked, prompt_org = dewarp_prompt(im_org.copy(), device, mbd_model_path)
 
     h,w = im_masked.shape[:2]
     im_masked = im_masked.copy()
     im_masked = cv2.resize(im_masked,(INPUT_SIZE,INPUT_SIZE))
     im_masked = im_masked / 255.0
     im_masked = torch.from_numpy(im_masked.transpose(2,0,1)).unsqueeze(0)
-    im_masked = im_masked.float().to(DEVICE)
+    im_masked = im_masked.to(device=device, dtype=torch.float32)
 
     prompt = torch.from_numpy(prompt_org.transpose(2,0,1)).unsqueeze(0)
-    prompt = prompt.float().to(DEVICE)
+    prompt = prompt.to(device=device, dtype=torch.float32)
 
     in_im = torch.cat((im_masked,prompt),dim=1)
 
@@ -115,6 +138,8 @@ def dewarping(model,im_path):
     model = model.float()
     with torch.no_grad():
         pred = model(in_im)
+        if not torch.isfinite(pred).all().item():
+            raise RuntimeError('Dewarping produced non-finite values.')
         pred = pred[0][:2].permute(1,2,0).cpu().numpy()
         pred = pred+base_coord
     ## smooth
@@ -129,10 +154,10 @@ def dewarping(model,im_path):
 
     return prompt_org[:,:,0],prompt_org[:,:,1],prompt_org[:,:,2],out_im
 
-def appearance(model,im_path):
-    MAX_SIZE=1600
+def appearance(model,im_path,max_size=None,precision='auto'):
+    MAX_SIZE = max_size if max_size is not None else default_max_size(next(model.parameters()).device)
     # obtain im and prompt
-    im_org = cv2.imread(im_path)
+    im_org = read_image(im_path)
     h,w = im_org.shape[:2]
     prompt = appearance_prompt(im_org)
     in_im = np.concatenate((im_org,prompt),-1)
@@ -143,17 +168,10 @@ def appearance(model,im_path):
     else:
         in_im = cv2.resize(in_im,(MAX_SIZE,MAX_SIZE))
     
-    # normalize
-    in_im = in_im / 255.0
-    in_im = torch.from_numpy(in_im.transpose(2,0,1)).unsqueeze(0)
-
-    # inference
-    in_im = in_im.half().to(DEVICE)
-    model = model.half()
     with torch.no_grad():
-        pred = model(in_im)
+        pred = forward_image(model, in_im, precision)
         pred = torch.clamp(pred,0,1)
-        pred = pred[0].permute(1,2,0).cpu().numpy()
+        pred = pred[0].permute(1,2,0).float().cpu().numpy()
         pred = (pred*255).astype(np.uint8)
 
         if max(w,h) < MAX_SIZE:
@@ -168,10 +186,10 @@ def appearance(model,im_path):
     return prompt[:,:,0],prompt[:,:,1],prompt[:,:,2],out_im
         
 
-def deshadowing(model,im_path):
-    MAX_SIZE=1600
+def deshadowing(model,im_path,max_size=None,precision='auto'):
+    MAX_SIZE = max_size if max_size is not None else default_max_size(next(model.parameters()).device)
     # obtain im and prompt
-    im_org = cv2.imread(im_path)
+    im_org = read_image(im_path)
     h,w = im_org.shape[:2]
     prompt = deshadow_prompt(im_org)
     in_im = np.concatenate((im_org,prompt),-1)
@@ -182,17 +200,10 @@ def deshadowing(model,im_path):
     else:
         in_im = cv2.resize(in_im,(MAX_SIZE,MAX_SIZE))
     
-    # normalize
-    in_im = in_im / 255.0
-    in_im = torch.from_numpy(in_im.transpose(2,0,1)).unsqueeze(0)
-
-    # inference
-    in_im = in_im.half().to(DEVICE)
-    model = model.half()
     with torch.no_grad():
-        pred = model(in_im)
+        pred = forward_image(model, in_im, precision)
         pred = torch.clamp(pred,0,1)
-        pred = pred[0].permute(1,2,0).cpu().numpy()
+        pred = pred[0].permute(1,2,0).float().cpu().numpy()
         pred = (pred*255).astype(np.uint8)
 
         if max(w,h) < MAX_SIZE:
@@ -207,23 +218,16 @@ def deshadowing(model,im_path):
     return prompt[:,:,0],prompt[:,:,1],prompt[:,:,2],out_im
 
 
-def deblurring(model,im_path):
+def deblurring(model,im_path,precision='auto'):
     # setup image
-    im_org = cv2.imread(im_path)
+    im_org = read_image(im_path)
     in_im,padding_h,padding_w = stride_integral(im_org,8)
     prompt = deblur_prompt(in_im)
     in_im = np.concatenate((in_im,prompt),-1)
-    in_im = in_im / 255.0
-    in_im = torch.from_numpy(in_im.transpose(2,0,1)).unsqueeze(0)
-    in_im = in_im.half().to(DEVICE)  
-    # inference
-    model.to(DEVICE)
-    model.eval()
-    model = model.half()
     with torch.no_grad():
-        pred = model(in_im)
+        pred = forward_image(model, in_im, precision)
         pred = torch.clamp(pred,0,1)
-        pred = pred[0].permute(1,2,0).cpu().numpy()
+        pred = pred[0].permute(1,2,0).float().cpu().numpy()
         pred = (pred*255).astype(np.uint8)
         out_im = pred[padding_h:,padding_w:]
     
@@ -231,20 +235,15 @@ def deblurring(model,im_path):
 
 
 
-def binarization(model,im_path):
-    im_org = cv2.imread(im_path)
+def binarization(model,im_path,precision='auto'):
+    im_org = read_image(im_path)
     im,padding_h,padding_w = stride_integral(im_org,8)
     prompt = binarization_promptv2(im)
     h,w = im.shape[:2]
     in_im = np.concatenate((im,prompt),-1)
 
-    in_im = in_im / 255.0
-    in_im = torch.from_numpy(in_im.transpose(2,0,1)).unsqueeze(0)
-    in_im = in_im.to(DEVICE)
-    model = model.half()
-    in_im = in_im.half()
     with torch.no_grad():
-        pred = model(in_im)
+        pred = forward_image(model, in_im, precision)
         pred = pred[:,:2,:,:]
         pred = torch.max(torch.softmax(pred,1),1)[1]
         pred = pred[0].cpu().numpy()
@@ -256,21 +255,22 @@ def binarization(model,im_path):
 
 def get_args():
     parser = argparse.ArgumentParser(description='Params')
-    parser.add_argument('--model_path', nargs='?', type=str, default='./checkpoints/docres.pkl',help='Path of the saved checkpoint')
-    parser.add_argument('--im_path', nargs='?', type=str, default='./distorted/',
+    parser.add_argument('--model_path', type=str, default=str(PROJECT_ROOT / 'checkpoints/docres.pkl'),help='Path of the saved checkpoint')
+    parser.add_argument('--im_path', type=str, default=str(PROJECT_ROOT / 'distorted'),
                         help='Path of input document image')
-    parser.add_argument('--out_folder', nargs='?', type=str, default='./restorted/',
+    parser.add_argument('--out_folder', type=str, default=str(PROJECT_ROOT / 'restorted'),
                         help='Folder of the output images')
-    parser.add_argument('--task', nargs='?', type=str, default='dewarping', 
+    parser.add_argument('--task', choices=TASKS, default='dewarping',
                         help='task that need to be executed')
     parser.add_argument('--save_dtsprompt', nargs='?', type=int, default=0, 
-                        help='Width of the input image')
+                        help='Whether to save the three prompt images')
+    add_runtime_arguments(parser)
     args = parser.parse_args()
-    possible_tasks = ['dewarping','deshadowing','appearance','deblurring','binarization','end2end']
-    assert args.task in possible_tasks, 'Unsupported task, task must be one of '+', '.join(possible_tasks)
+    validate_runtime_arguments(parser, args)
     return args
 
 def model_init(args):
+    device = select_device(getattr(args, 'device', 'auto'))
    # prepare model
     model = restormer_arch.Restormer( 
         inp_channels=6, 
@@ -285,37 +285,40 @@ def model_init(args):
         dual_pixel_task = True        
     )
 
-    if DEVICE.type == 'cpu':
-        state = convert_state_dict(torch.load(args.model_path, map_location='cpu')['model_state'])
-    else:
-        state = convert_state_dict(torch.load(args.model_path, map_location='cuda:0')['model_state'])    
+    state = load_model_state(args.model_path)
     model.load_state_dict(state)
 
     model.eval()
-    model = model.to(DEVICE)
+    model = model.to(device)
     return model
 
-def inference_one_im(model,im_path,task):
+def inference_one_im(model, im_path, task, *, max_size=None, precision='auto',
+                     mbd_model_path=DEFAULT_MBD_PATH, out_folder=None):
     if task=='dewarping':
-        prompt1,prompt2,prompt3,restorted = dewarping(model,im_path)
+        return dewarping(model, im_path, mbd_model_path)
     elif task=='deshadowing':
-        prompt1,prompt2,prompt3,restorted = deshadowing(model,im_path)
+        return deshadowing(model, im_path, max_size, precision)
     elif task=='appearance':
-        prompt1,prompt2,prompt3,restorted = appearance(model,im_path)
+        return appearance(model, im_path, max_size, precision)
     elif task=='deblurring':
-        prompt1,prompt2,prompt3,restorted = deblurring(model,im_path)
+        return deblurring(model, im_path, precision)
     elif task=='binarization':
-        prompt1,prompt2,prompt3,restorted = binarization(model,im_path)
+        return binarization(model, im_path, precision)
     elif task=='end2end':
-        prompt1,prompt2,prompt3,restorted = dewarping(model,im_path)
-        cv2.imwrite('restorted/step1.jpg',restorted)
-        prompt1,prompt2,prompt3,restorted = deshadowing(model,'restorted/step1.jpg')
-        cv2.imwrite('restorted/step2.jpg',restorted)
-        prompt1,prompt2,prompt3,restorted = appearance(model,'restorted/step2.jpg')
-        # os.remove('restorted/step1.jpg')
-        # os.remove('restorted/step2.jpg')
-
-    return prompt1,prompt2,prompt3,restorted
+        if out_folder is not None:
+            Path(out_folder).mkdir(parents=True, exist_ok=True)
+        # Keep intermediate files isolated per image and clean them up on failure too.
+        with TemporaryDirectory(prefix='docres-', dir=out_folder) as temp_dir:
+            step1 = Path(temp_dir) / 'step1.jpg'
+            step2 = Path(temp_dir) / 'step2.jpg'
+            _, _, _, restored = dewarping(model, im_path, mbd_model_path)
+            write_image(step1, restored)
+            release_mps_cache(model)
+            _, _, _, restored = deshadowing(model, step1, max_size, precision)
+            write_image(step2, restored)
+            release_mps_cache(model)
+            return appearance(model, step2, max_size, precision)
+    raise ValueError(f'Unsupported task: {task}')
 
 
 def save_results(
@@ -323,48 +326,34 @@ def save_results(
     out_folder: str,
     task: str,
     save_dtsprompt: bool,
+    restored,
+    prompts,
 ):
-    im_name = os.path.split(img_path)[-1]
-    im_format = '.'+im_name.split('.')[-1]
-    save_path = os.path.join(out_folder, im_name.replace(im_format, '_' + task + im_format))
-    cv2.imwrite(save_path, restorted)
+    source = Path(img_path)
+    save_path = Path(out_folder) / f'{source.stem}_{task}{source.suffix}'
+    write_image(save_path, restored)
     if save_dtsprompt:
-        cv2.imwrite(save_path.replace(im_format, '_prompt1' + im_format), prompt1)
-        cv2.imwrite(save_path.replace(im_format, '_prompt2' + im_format), prompt2)
-        cv2.imwrite(save_path.replace(im_format, '_prompt3' + im_format), prompt3)
+        for index, prompt in enumerate(prompts, 1):
+            write_image(save_path.with_name(f'{save_path.stem}_prompt{index}{save_path.suffix}'), prompt)
+    return save_path
+
+
+def main():
+    args = get_args()
+    paths = image_paths(args.im_path)
+    Path(args.out_folder).mkdir(parents=True, exist_ok=True)
+    model = model_init(args)
+    print(f'Device: {next(model.parameters()).device}; precision: {args.precision}; task: {args.task}')
+    for path in paths:
+        prompt1, prompt2, prompt3, restored = inference_one_im(
+            model, path, args.task, max_size=args.max_size, precision=args.precision,
+            mbd_model_path=args.mbd_model_path, out_folder=args.out_folder,
+        )
+        saved = save_results(path, args.out_folder, args.task, args.save_dtsprompt,
+                             restored, (prompt1, prompt2, prompt3))
+        print(f'Saved: {saved}')
+        release_mps_cache(model)
 
 
 if __name__ == '__main__':
-
-    ## model init
-    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    args = get_args()
-    model = model_init(args)
-
-    img_source = args.im_path
-
-    if Path(img_source).is_dir():
-        img_paths = glob.glob(os.path.join(img_source, '*'))
-        for img_path in img_paths:
-            ## inference
-            prompt1,prompt2,prompt3,restorted = inference_one_im(model,img_path,args.task)
-
-            ## results saving
-            save_results(
-                img_path=img_path,
-                out_folder=args.out_folder,
-                task=args.task,
-                save_dtsprompt=args.save_dtsprompt,
-            )
-            
-    else:
-        ## inference
-        prompt1,prompt2,prompt3,restorted = inference_one_im(model,img_source,args.task)
-
-        ## results saving
-        save_results(
-            img_path=img_source,
-            out_folder=args.out_folder,
-            task=args.task,
-            save_dtsprompt=args.save_dtsprompt,
-        )
+    main()

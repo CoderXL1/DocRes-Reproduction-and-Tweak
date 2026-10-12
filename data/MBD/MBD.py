@@ -1,11 +1,12 @@
 import cv2
 import numpy as np
-import MBD_utils
+from . import MBD_utils
 import torch
 import torch.nn.functional as F
+from inference_runtime import select_device
 
 
-def mask_base_dewarper(image,mask):
+def mask_base_dewarper(image,mask,device='auto'):
     '''
     input:
         image -> ndarray HxWx3 uint8
@@ -15,9 +16,12 @@ def mask_base_dewarper(image,mask):
         grid (optional) -> ndarray HxWx2 -1~1
     '''
 
+    device = select_device(device)
     ## get contours
     # _, contours, hierarchy = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)  ## cv2.__version__ == 3.x
     contours,hierarchy = cv2.findContours(mask,cv2.RETR_EXTERNAL,method=cv2.CHAIN_APPROX_SIMPLE)  ## cv2.__version__ == 4.x
+    if not contours or max(cv2.contourArea(contour) for contour in contours) == 0:
+        raise ValueError('The document mask has no contour with positive area.')
 
     ## get biggest contours and four corners based on Douglas-Peucker algorithm
     four_corners, maxArea, contour= MBD_utils.DP_algorithm(contours)
@@ -64,7 +68,7 @@ def mask_base_dewarper(image,mask):
 
     ## dewarp base on generated grid
     source_points = source_points.reshape(-1,2)/np.array([image.shape[:2][::-1]]).reshape(1,2)
-    source_points = torch.from_numpy(source_points).float().cuda()
+    source_points = torch.from_numpy(source_points).to(device=device, dtype=torch.float32)
     source_points = source_points.unsqueeze(0)
     source_points = (source_points-0.5)*2
     target_points = np.asarray(target_points).reshape(-1,2)/np.array([image.shape[:2][::-1]]).reshape(1,2)
@@ -72,10 +76,11 @@ def mask_base_dewarper(image,mask):
     target_points = (target_points-0.5)*2
 
     model = MBD_utils.TPSGridGen(target_height=256,target_width=256,target_control_points=target_points)
-    model = model.cuda()
+    # Construct TPS buffers/inverse on CPU, then move the complete module together.
+    model = model.to(device)
     grid = model(source_points).view(-1,256,256,2).permute(0,3,1,2)
-    grid = F.interpolate(grid,(h,w),mode='bilinear').permute(0,2,3,1)
-    dewarped = MBD_utils.torch2cvimg(F.grid_sample(MBD_utils.cvimg2torch(image).cuda(),grid))[0]
+    grid = F.interpolate(grid,(h,w),mode='bilinear',align_corners=False).permute(0,2,3,1)
+    dewarped = MBD_utils.torch2cvimg(F.grid_sample(MBD_utils.cvimg2torch(image).to(device),grid,align_corners=False))[0]
     return dewarped,grid[0].cpu().numpy()
 
 def mask_base_cropper(image,mask):
@@ -89,7 +94,7 @@ def mask_base_cropper(image,mask):
     '''
 
     ## get contours
-    _, contours, hierarchy = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)  ## cv2.__version__ == 3.x
+    contours, hierarchy = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
     # contours,hierarchy = cv2.findContours(mask,cv2.RETR_EXTERNAL,method=cv2.CHAIN_APPROX_SIMPLE)  ## cv2.__version__ == 4.x
 
     ## get biggest contours and four corners based on Douglas-Peucker algorithm
@@ -103,8 +108,6 @@ def mask_base_cropper(image,mask):
     ## 最小外接矩形
     rect = cv2.minAreaRect(contour) # 得到最小外接矩形的（中心(x,y), (宽,高), 旋转角度）
     box = cv2.boxPoints(rect) # cv2.boxPoints(rect) for OpenCV 3.x 获取最小外接矩形的4个顶点坐标
-    box = np.int0(box)
+    box = box.astype(np.intp)
     box = box.reshape((4,1,2))    
-
-
 

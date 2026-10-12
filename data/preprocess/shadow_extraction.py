@@ -5,8 +5,10 @@ import os
 from tqdm import tqdm 
 import random
 import sys
-sys.path.append('./data/MBD')
-from MBD import mask_base_dewarper
+from pathlib import Path
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from data.MBD.MBD import mask_base_dewarper
 
 def shadowExtract(cap_im, alb_im):
     im = cap_im
