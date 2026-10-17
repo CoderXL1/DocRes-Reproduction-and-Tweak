@@ -11,33 +11,13 @@
 <img src="images/motivation.jpg" width="400">
 </p>
 
-This is the official implementation of our paper [DocRes: A Generalist Model Toward Unifying Document Image Restoration Tasks](https://arxiv.org/abs/2405.04408).
+This repository is a personal reproduction of the official implementation of [DocRes: A Generalist Model Toward Unifying Document Image Restoration Tasks](https://arxiv.org/abs/2405.04408).
 
-## News 
-🔥 [2025.7] Our paper ["Aesthetics is Cheap, Show me the Text: An Empirical Evaluation of State-of-the-Art Generative Models for OCR"](https://arxiv.org/abs/2507.15085), which conducts a comprehensive evaluation of SOTA generative models has been online at arXiv. 🔥
+The main modifications include support for mps backend.
 
-🔥 [2025.6] Beyond GPT-4o, we evaluate more SOTA generative models' image generation abilities in various document processing tasks. Check [here](https://github.com/NiceRingNode/Awesome-Image-Generators-for-OCR-Image-Generation-and-Editing)! 🔥
+See below for more details.
 
-🎉 [2025.5] We evaluate the image generation ability of GPT-4o, including various document processing tasks. Check [here](https://github.com/NiceRingNode/Awesome-Image-Generators-for-OCR-Image-Generation-and-Editing)! 🔥
-
-🎉 [2025.2] Our new work [LGGPT](https://github.com/NiceRingNode/LGGPT) has been accepted to IJCV 2025, an LLM that unifies versatile layout generation tasks! Welcome to follow!
-
-🔥 A comprehensive [Recommendation for Document Image Processing](https://github.com/ZZZHANG-jx/Recommendations-Document-Image-Processing) is available.
-
-
-## Inference 
-1. Put MBD model weights [mbd.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./data/MBD/checkpoint/`
-2. Put DocRes model weights [docres.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./checkpoints/`
-3. Run the following script and the results will be saved in `./restorted/`. We have provided some distorted examples in `./input/`.
-```bash
-python inference.py --im_path ./input/for_dewarping.png --task dewarping --save_dtsprompt 1
-```
-
-- `--im_path`: the path of input document image
-- `--task`: task that need to be executed, it must be one of _dewarping_, _deshadowing_, _appearance_, _deblurring_, _binarization_, or _end2end_
-- `--save_dtsprompt`: whether to save the DTSPrompt
-
-### Apple Silicon / MPS
+## Cross-backend Support
 
 Use a native arm64 Python environment (Python 3.10 or newer) and install
 `requirements.txt`. The standard PyTorch macOS wheels include MPS support.
@@ -69,6 +49,18 @@ The same runtime options are available in `eval.py`. If an unsupported MPS opera
 is encountered, `PYTORCH_ENABLE_MPS_FALLBACK=1` can be set before starting Python
 to enable PyTorch's CPU fallback.
 
+## Inference
+1. Put MBD model weights [mbd.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./data/MBD/checkpoint/`
+2. Put DocRes model weights [docres.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./checkpoints/`
+3. Run the following script and the results will be saved in `./restorted/`. We have provided some distorted examples in `./input/`.
+```bash
+python inference.py --im_path ./input/for_dewarping.png --task dewarping --save_dtsprompt 1
+```
+
+- `--im_path`: the path of input document image
+- `--task`: task that need to be executed, it must be one of _dewarping_, _deshadowing_, _appearance_, _deblurring_, _binarization_, or _end2end_
+- `--save_dtsprompt`: whether to save the DTSPrompt
+
 ## Evaluation
 
 1. Dataset preparation, see [dataset instruction](./data/README.md)
@@ -87,15 +79,3 @@ python eval.py --dataset realdae
 ```bash
 bash start_train.sh
 ```
-
-
-## Citation
-```
-@inproceedings{zhangdocres2024, 
-Author = {Jiaxin Zhang, Dezhi Peng, Chongyu Liu , Peirong Zhang and Lianwen Jin}, 
-Booktitle = {In Proceedings of the IEEE/CV Conference on Computer Vision and Pattern Recognition}, 
-Title = {{DocRes: A Generalist Model Toward Unifying Document Image Restoration Tasks}}, 
-Year = {2024}}   
-```
-## ⭐ Star Rising
-[![Star Rising](https://api.star-history.com/svg?repos=ZZZHANG-jx/DocRes&type=Timeline)](https://star-history.com/#ZZZHANG-jx/DocRes&Timeline)
