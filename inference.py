@@ -144,7 +144,7 @@ def dewarping(model,im_path,mbd_model_path=DEFAULT_MBD_PATH):
         pred = pred+base_coord
     ## smooth
     for i in range(15):
-        pred = cv2.blur(pred,(3,3),borderType=cv2.BORDER_REPLICATE) 
+        pred = cv2.blur(pred,(3,3),borderType=cv2.BORDER_REPLICATE)
     pred = cv2.resize(pred,(w,h))*(w,h)
     pred = pred.astype(np.float32)
     out_im = cv2.remap(im_org,pred[:,:,0],pred[:,:,1],cv2.INTER_LINEAR)
@@ -245,7 +245,7 @@ def binarization(model,im_path,precision='auto'):
     with torch.no_grad():
         pred = forward_image(model, in_im, precision)
         pred = pred[:,:2,:,:]
-        pred = torch.max(torch.softmax(pred,1),1)[1]
+        pred = torch.max(torch.softmax(pred,1),1)[1]  # torch.max()[1] stands for argmax
         pred = pred[0].cpu().numpy()
         pred = (pred*255).astype(np.uint8)
         pred = cv2.resize(pred,(w,h))
@@ -258,7 +258,7 @@ def get_args():
     parser.add_argument('--model_path', type=str, default=str(PROJECT_ROOT / 'checkpoints/docres.pkl'),help='Path of the saved checkpoint')
     parser.add_argument('--im_path', type=str, default=str(PROJECT_ROOT / 'distorted'),
                         help='Path of input document image')
-    parser.add_argument('--out_folder', type=str, default=str(PROJECT_ROOT / 'restorted'),
+    parser.add_argument('--out_folder', type=str, default=str(PROJECT_ROOT / 'restored/inference'),
                         help='Folder of the output images')
     parser.add_argument('--task', choices=TASKS, default='dewarping',
                         help='task that need to be executed')

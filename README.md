@@ -25,7 +25,7 @@ The existing checkpoint files work without conversion.
 
 ```bash
 python inference.py --device mps --im_path ./input/for_dewarping.png --task dewarping
-python inference.py --device mps --im_path ./distorted/ --task end2end --out_folder ./restored/
+python inference.py --device mps --im_path ./distorted/ --task end2end --out_folder ./restored/inference/
 ```
 
 - `--device auto` (default) selects CUDA, MPS, then CPU according to availability.
@@ -41,8 +41,8 @@ python inference.py --device mps --im_path ./distorted/ --task end2end --out_fol
   only for dewarping/end2end and reused across images.
 - Default resource paths are resolved relative to the project. Explicit relative
   paths are resolved relative to your current working directory.
-- The original output directory spelling `restorted/` is retained for compatibility;
-  `--out_folder` can use any directory. End2end intermediate images are temporary
+- The default output directory is `restored/inference/`; `--out_folder` can use
+  any directory. End2end intermediate images are temporary
   and are removed automatically.
 
 The same runtime options are available in `eval.py`. If an unsupported MPS operator
@@ -52,7 +52,7 @@ to enable PyTorch's CPU fallback.
 ## Inference
 1. Put MBD model weights [mbd.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./data/MBD/checkpoint/`
 2. Put DocRes model weights [docres.pkl](https://1drv.ms/f/s!Ak15mSdV3Wy4iahoKckhDPVP5e2Czw?e=iClwdK) to `./checkpoints/`
-3. Run the following script and the results will be saved in `./restorted/`. We have provided some distorted examples in `./input/`.
+3. Run the following script and the results will be saved in `./restored/inference/`. We have provided some distorted examples in `./input/`.
 ```bash
 python inference.py --im_path ./input/for_dewarping.png --task dewarping --save_dtsprompt 1
 ```
