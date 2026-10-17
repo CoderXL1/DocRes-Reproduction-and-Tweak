@@ -67,7 +67,8 @@ def dewarping(model, im_path, mbd_model_path=baseline.DEFAULT_MBD_PATH, *,
 
 def get_args(argv=None):
     parser = argparse.ArgumentParser(description='Independent dewarping smoothing sweep')
-    parser.add_argument('--im_path', default=str(PROJECT_ROOT / 'input/distorted'))
+    parser.add_argument('--im_path', required=True,
+                        help='Path of an input document image or directory (required)')
     parser.add_argument('--model_path', default=str(PROJECT_ROOT / 'checkpoints/docres.pkl'))
     parser.add_argument('--mbd_model_path', default=str(baseline.DEFAULT_MBD_PATH))
     parser.add_argument('--device', choices=['auto', 'mps', 'cpu', 'cuda'], default='auto')

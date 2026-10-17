@@ -25,7 +25,8 @@ python -m experiments.dewarp_smoothing.inference \
   --out_folder restored/dewarp_smoothing/comparison-01 --save_dtsprompt
 ```
 
-`--im_path` 支持单张图片或目录，默认读取 `input/distorted/`。默认输出到
+`--im_path` 为必填参数，支持单张图片或目录，不选择默认输入目录。
+本地输入可放在 Git 忽略的 `input/local/` 下，或显式指定其他位置。默认输出到
 `restored/dewarp_smoothing/<UTC时间戳>/`，指定的输出目录必须尚不存在。
 生成图片使用 PNG；每个输入文件有独立子目录，结果名包含核大小和平滑次数。
 `restored/` 已被 Git 忽略，早期探索图片归档在 `restored/dewarp_smoothing/legacy/`。

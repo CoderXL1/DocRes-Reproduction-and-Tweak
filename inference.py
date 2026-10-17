@@ -256,8 +256,8 @@ def binarization(model,im_path,precision='auto'):
 def get_args():
     parser = argparse.ArgumentParser(description='Params')
     parser.add_argument('--model_path', type=str, default=str(PROJECT_ROOT / 'checkpoints/docres.pkl'),help='Path of the saved checkpoint')
-    parser.add_argument('--im_path', type=str, default=str(PROJECT_ROOT / 'input/distorted'),
-                        help='Path of input document image')
+    parser.add_argument('--im_path', type=str, required=True,
+                        help='Path of an input document image or directory (required)')
     parser.add_argument('--out_folder', type=str, default=str(PROJECT_ROOT / 'restored/inference'),
                         help='Folder of the output images')
     parser.add_argument('--task', choices=TASKS, default='dewarping',

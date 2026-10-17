@@ -25,7 +25,7 @@ The existing checkpoint files work without conversion.
 
 ```bash
 python inference.py --device mps --im_path ./input/for_dewarping.png --task dewarping
-python inference.py --device mps --im_path ./input/distorted/ --task end2end --out_folder ./restored/inference/
+python inference.py --device mps --im_path ./input/local/ --task end2end --out_folder ./restored/inference/
 ```
 
 - `--device auto` (default) selects CUDA, MPS, then CPU according to availability.
@@ -57,9 +57,20 @@ to enable PyTorch's CPU fallback.
 python inference.py --im_path ./input/for_dewarping.png --task dewarping --save_dtsprompt 1
 ```
 
-- `--im_path`: the path of input document image
+- `--im_path`: required; the path of an input document image or directory
 - `--task`: task that need to be executed, it must be one of _dewarping_, _deshadowing_, _appearance_, _deblurring_, _binarization_, or _end2end_
 - `--save_dtsprompt`: whether to save the DTSPrompt
+
+Keep your own inputs in `input/local/`, which is ignored by Git. Optional subdirectories
+such as `dewarping/`, `deshadowing/` and `deblurring/` can help organize files by task.
+Directory names do not select the task; use `--task` explicitly when choosing a task:
+
+```bash
+python inference.py --im_path input/local/deshadowing --task deshadowing
+```
+
+Both baseline and experimental inference require `--im_path`; neither selects a
+default input folder. Example images shipped with the repository remain in `input/`.
 
 ## Project Structure
 
@@ -78,7 +89,7 @@ data/                            # MBD implementation, preprocessing and dataset
   MBD/checkpoint/                # Downloaded MBD weights (local)
 checkpoints/                     # Downloaded DocRes weights (local)
 input/                           # Versioned example inputs
-  distorted/                     # User-provided inputs (local)
+  local/                         # User-provided inputs for any task (Git-ignored)
 experiments/
   RESEARCH_NOTES.md               # Research hypotheses and experiment plans
   dewarp_smoothing/

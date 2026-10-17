@@ -10,7 +10,7 @@ __pycache__/
 # Downloaded model weights and local inputs
 checkpoints/
 /data/MBD/checkpoint/
-input/distorted/
+/input/local/
 
 # Generated inference outputs
 /restored/
