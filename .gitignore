@@ -15,3 +15,5 @@ distorted/
 # Generated inference outputs
 /restorted/
 /restored/
+/restored_debug/
+/tweaks/dewarp_smooth_times/*.png
