@@ -25,7 +25,7 @@ The existing checkpoint files work without conversion.
 
 ```bash
 python inference.py --device mps --im_path ./input/for_dewarping.png --task dewarping
-python inference.py --device mps --im_path ./distorted/ --task end2end --out_folder ./restored/inference/
+python inference.py --device mps --im_path ./input/distorted/ --task end2end --out_folder ./restored/inference/
 ```
 
 - `--device auto` (default) selects CUDA, MPS, then CPU according to availability.
@@ -78,7 +78,7 @@ data/                            # MBD implementation, preprocessing and dataset
   MBD/checkpoint/                # Downloaded MBD weights (local)
 checkpoints/                     # Downloaded DocRes weights (local)
 input/                           # Versioned example inputs
-distorted/                       # User-provided inputs (local)
+  distorted/                     # User-provided inputs (local)
 experiments/
   RESEARCH_NOTES.md               # Research hypotheses and experiment plans
 restored/                        # Generated outputs (local)
