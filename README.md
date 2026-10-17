@@ -81,12 +81,16 @@ input/                           # Versioned example inputs
   distorted/                     # User-provided inputs (local)
 experiments/
   RESEARCH_NOTES.md               # Research hypotheses and experiment plans
+  dewarp_smoothing/
+    inference.py                 # Independent smoothing experiment entry point
+    README.md                    # Experiment details and commands
 restored/                        # Generated outputs (local)
   inference/                     # Default inference outputs
     legacy/                      # Archived example outputs
   debug/legacy/                  # Archived debugging outputs
   dewarp_smoothing/
     legacy/                      # Archived exploratory outputs
+    <timestamp>/                 # New runs, including run.json
   migration.json                 # Local file-migration paths and SHA-256 hashes
 ```
 
@@ -97,9 +101,19 @@ functions that need to change and reuse unchanged helpers from the baseline.
 The root inference script processes each input once and retains the baseline
 dewarping postprocessing: a 3×3 blur applied 15 times.
 
-See the [research notes](experiments/RESEARCH_NOTES.md) for hypotheses and
-experiment plans. Experimental entry points are being prepared; their run
-instructions will be added with their implementation.
+Run experimental entry points as modules from the repository root:
+
+```bash
+python -m experiments.dewarp_smoothing.inference \
+  --im_path input/189_origin.png --device mps \
+  --kernel_sizes 3 5 20 --smooth_times 0 1 5 15 30
+```
+
+See the [smoothing experiment instructions](experiments/dewarp_smoothing/README.md)
+and [research notes](experiments/RESEARCH_NOTES.md) for details. The smoothing
+experiment predicts one coordinate map per image and applies each setting to a
+separate copy. Each run gets a new output directory and records its parameters,
+input paths, weight paths, device and Git state in `run.json`.
 
 For future training experiments, add a local `train.py` to the corresponding
 experiment directory. If the model changes, add a local `model.py` shared by that
@@ -118,9 +132,9 @@ The previous mixed-purpose directories have been consolidated as follows:
 | `restored_debug/` | `restored/debug/legacy/` |
 | `restorted/` (previous misspelling) | `restored/inference/legacy/` |
 
-New baseline outputs default to `restored/inference/`; `--out_folder` can
-override this location. Keep future experiment outputs under
-`restored/<experiment_name>/`, with a separate directory for each run.
+New baseline outputs default to `restored/inference/`. New smoothing runs default
+to `restored/dewarp_smoothing/<UTC timestamp>/`; `--out_folder` can override either
+location. The experiment requires a new directory to avoid overwriting earlier runs.
 
 Code and research notes remain versioned. Generated images, prompts and run records
 under `restored/` are ignored by Git. Previously tracked output images have been
