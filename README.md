@@ -61,6 +61,74 @@ python inference.py --im_path ./input/for_dewarping.png --task dewarping --save_
 - `--task`: task that need to be executed, it must be one of _dewarping_, _deshadowing_, _appearance_, _deblurring_, _binarization_, or _end2end_
 - `--save_dtsprompt`: whether to save the DTSPrompt
 
+## Project Structure
+
+The root scripts provide baseline inference, evaluation and training. Each experiment
+has its own directory under `experiments/`; inference and experiment outputs share
+the local `restored/` directory.
+
+```text
+inference.py                     # Baseline inference entry point
+inference_runtime.py             # Shared device, checkpoint and image I/O helpers
+eval.py                          # Baseline dataset evaluation
+train.py                         # Baseline training entry point
+models/                          # Baseline model implementation
+loaders/                         # Training data loaders
+data/                            # MBD implementation, preprocessing and dataset instructions
+  MBD/checkpoint/                # Downloaded MBD weights (local)
+checkpoints/                     # Downloaded DocRes weights (local)
+input/                           # Versioned example inputs
+distorted/                       # User-provided inputs (local)
+experiments/
+  RESEARCH_NOTES.md               # Research hypotheses and experiment plans
+restored/                        # Generated outputs (local)
+  inference/                     # Default inference outputs
+    legacy/                      # Archived example outputs
+  debug/legacy/                  # Archived debugging outputs
+  dewarp_smoothing/
+    legacy/                      # Archived exploratory outputs
+  migration.json                 # Local file-migration paths and SHA-256 hashes
+```
+
+### Independent experiments
+
+Keep experiment-specific changes in `experiments/<experiment_name>/`. Copy the
+functions that need to change and reuse unchanged helpers from the baseline.
+The root inference script processes each input once and retains the baseline
+dewarping postprocessing: a 3×3 blur applied 15 times.
+
+See the [research notes](experiments/RESEARCH_NOTES.md) for hypotheses and
+experiment plans. Experimental entry points are being prepared; their run
+instructions will be added with their implementation.
+
+For future training experiments, add a local `train.py` to the corresponding
+experiment directory. If the model changes, add a local `model.py` shared by that
+experiment's training and inference entry points. Calls to baseline functions still
+use baseline implementations internally; explicitly connect experimental functions
+in the experiment's own pipeline.
+
+### Output consolidation
+
+The previous mixed-purpose directories have been consolidated as follows:
+
+| Previous location | Current location |
+| --- | --- |
+| `tweaks/01_explicit_task_conditioning_and_output_heads.md` | `experiments/RESEARCH_NOTES.md` |
+| `tweaks/dewarp_smooth_times/` | `restored/dewarp_smoothing/legacy/` |
+| `restored_debug/` | `restored/debug/legacy/` |
+| `restorted/` (previous misspelling) | `restored/inference/legacy/` |
+
+New baseline outputs default to `restored/inference/`; `--out_folder` can
+override this location. Keep future experiment outputs under
+`restored/<experiment_name>/`, with a separate directory for each run.
+
+Code and research notes remain versioned. Generated images, prompts and run records
+under `restored/` are ignored by Git. Previously tracked output images have been
+removed from version control and retained locally in the archive directories;
+fresh clones do not include these images. Local inputs and downloaded weights are
+also ignored. Dataset evaluation continues to write predictions next to its inputs
+under `--data_root`, as described in the evaluation workflow.
+
 ## Evaluation
 
 1. Dataset preparation, see [dataset instruction](./data/README.md)
